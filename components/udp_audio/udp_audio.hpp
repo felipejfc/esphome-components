@@ -21,40 +21,46 @@ class UDPAudioComponent : public Component {
     }
 
     this->microphone_->add_data_callback([this](const std::vector<uint8_t> &data) {
-      if (data.size() % 4 != 0) {
-        ESP_LOGW(TAG, "Received odd number of bytes (%u), expected multiple of 4 for stereo 16-bit", data.size());
+      if (data.size() % 8 != 0) {  // 8 bytes per stereo frame (2 * 4 bytes)
+        ESP_LOGW(TAG, "Received odd number of bytes (%u), expected multiple of 8 for stereo 32-bit", data.size());
         return;
       }
 
       ESP_LOGD(TAG, "Data buffer size: %u bytes", data.size());
-      const int16_t *samples = reinterpret_cast<const int16_t *>(data.data());
-      size_t num_samples = data.size() / sizeof(int16_t);
+      const int32_t *samples = reinterpret_cast<const int32_t *>(data.data());
+      size_t num_frames = data.size() / 8;  // Each frame has 2 int32_t (left and right)
       std::vector<int16_t> mono_data;
-      mono_data.reserve(num_samples / 2);
+      mono_data.reserve(num_frames);
 
       // Log samples
-      size_t log_limit = std::min<size_t>(20, num_samples);
-      for (size_t i = 0; i < log_limit; i += 2) {
-        ESP_LOGD(TAG, "Sample %u - Left: %d (0x%04X), Right: %d (0x%04X)", i / 2,
-                 samples[i], static_cast<uint16_t>(samples[i]), samples[i + 1], static_cast<uint16_t>(samples[i + 1]));
+      size_t log_limit = std::min<size_t>(5, num_frames);  // Reduced for brevity
+      for (size_t i = 0; i < log_limit; i++) {
+        int32_t left = samples[2 * i];
+        int32_t right = samples[2 * i + 1];
+        ESP_LOGD(TAG, "Frame %u - Left: %d (0x%08X), Right: %d (0x%08X)", i,
+                left, static_cast<uint32_t>(left), right, static_cast<uint32_t>(right));
       }
 
-      // Check for repetition
-      int16_t last_left = samples[0];
+      // Process and convert to 16-bit mono
+      int32_t last_left = samples[0];
       size_t repeat_count = 1;
-      for (size_t i = 2; i < num_samples; i += 2) {
-        if (samples[i] == last_left) {
+      for (size_t i = 0; i < num_frames; i++) {
+        int32_t left = samples[2 * i];
+        int32_t right = samples[2 * i + 1];
+        // Convert to 16-bit by taking upper 16 bits
+        int16_t right_16 = static_cast<int16_t>(right >> 16);  // Use right channel
+        // Check repetition on left channel (could use right if preferred)
+        if (left == last_left) {
           repeat_count++;
         } else {
           if (repeat_count >= 5) {
             ESP_LOGW(TAG, "Detected %u repeated left samples: %d", repeat_count, last_left);
           }
           repeat_count = 1;
-          last_left = samples[i];
+          last_left = left;
         }
-        //mono_data.push_back(samples[i]); // Left channel
-        // Test right channel by commenting above and uncommenting below
-        mono_data.push_back(samples[i + 1]); // Right channel
+        mono_data.push_back(right_16);  // Send right channel as mono
+        // Alternatively, use left: int16_t left_16 = static_cast<int16_t>(left >> 16); mono_data.push_back(left_16);
       }
       if (repeat_count >= 5) {
         ESP_LOGW(TAG, "Detected %u repeated left samples: %d", repeat_count, last_left);
