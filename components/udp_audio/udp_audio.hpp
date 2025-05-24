@@ -36,9 +36,6 @@ class UDPAudioComponent : public Component {
       for (size_t i = 0; i < num_samples; i += 2) {
         mono_data.push_back(samples[i]); // Left channel
         // Log right channel for debugging
-        if (i < 10) { // Log first few samples
-          ESP_LOGD(TAG, "Left: %d, Right: %d", samples[i], samples[i + 1]);
-        }
       }
 
       this->send_data_(mono_data);
