@@ -33,7 +33,6 @@ class UDPAudioComponent : public Component {
 
       // Process and convert to 16-bit mono
       int32_t last_left = samples[0];
-      size_t repeat_count = 1;
       for (size_t i = 0; i < num_frames; i++) {
         int32_t left = samples[2 * i];
         int32_t right = samples[2 * i + 1];
@@ -41,19 +40,11 @@ class UDPAudioComponent : public Component {
         int16_t right_16 = static_cast<int16_t>(right >> 16);  // Use right channel
         // Check repetition on left channel (could use right if preferred)
         if (left == last_left) {
-          repeat_count++;
         } else {
-          if (repeat_count >= 5) {
-            ESP_LOGW(TAG, "Detected %u repeated left samples: %d", repeat_count, last_left);
-          }
-          repeat_count = 1;
           last_left = left;
         }
         mono_data.push_back(right_16);  // Send right channel as mono
         // Alternatively, use left: int16_t left_16 = static_cast<int16_t>(left >> 16); mono_data.push_back(left_16);
-      }
-      if (repeat_count >= 5) {
-        ESP_LOGW(TAG, "Detected %u repeated left samples: %d", repeat_count, last_left);
       }
 
       this->send_data_(mono_data);
