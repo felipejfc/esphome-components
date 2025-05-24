@@ -21,21 +21,43 @@ class UDPAudioComponent : public Component {
     }
 
     this->microphone_->add_data_callback([this](const std::vector<uint8_t> &data) {
-      // Reinterpret uint8_t vector as int16_t (2 bytes per sample)
       if (data.size() % 4 != 0) {
         ESP_LOGW(TAG, "Received odd number of bytes (%u), expected multiple of 4 for stereo 16-bit", data.size());
         return;
       }
 
+      ESP_LOGD(TAG, "Data buffer size: %u bytes", data.size());
       const int16_t *samples = reinterpret_cast<const int16_t *>(data.data());
-      size_t num_samples = data.size() / sizeof(int16_t); // Total samples (left + right)
+      size_t num_samples = data.size() / sizeof(int16_t);
       std::vector<int16_t> mono_data;
-      mono_data.reserve(num_samples / 2); // Left channel only
+      mono_data.reserve(num_samples / 2);
 
-      // Extract left channel (every other sample)
-      for (size_t i = 0; i < num_samples; i += 2) {
-        mono_data.push_back(samples[i]); // Left channel
-        // Log right channel for debugging
+      // Log samples
+      size_t log_limit = std::min<size_t>(20, num_samples);
+      for (size_t i = 0; i < log_limit; i += 2) {
+        ESP_LOGD(TAG, "Sample %u - Left: %d (0x%04X), Right: %d (0x%04X)", i / 2,
+                 samples[i], static_cast<uint16_t>(samples[i]), samples[i + 1], static_cast<uint16_t>(samples[i + 1]));
+      }
+
+      // Check for repetition
+      int16_t last_left = samples[0];
+      size_t repeat_count = 1;
+      for (size_t i = 2; i < num_samples; i += 2) {
+        if (samples[i] == last_left) {
+          repeat_count++;
+        } else {
+          if (repeat_count >= 5) {
+            ESP_LOGW(TAG, "Detected %u repeated left samples: %d", repeat_count, last_left);
+          }
+          repeat_count = 1;
+          last_left = samples[i];
+        }
+        //mono_data.push_back(samples[i]); // Left channel
+        // Test right channel by commenting above and uncommenting below
+        mono_data.push_back(samples[i + 1]); // Right channel
+      }
+      if (repeat_count >= 5) {
+        ESP_LOGW(TAG, "Detected %u repeated left samples: %d", repeat_count, last_left);
       }
 
       this->send_data_(mono_data);
