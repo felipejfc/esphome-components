@@ -26,20 +26,10 @@ class UDPAudioComponent : public Component {
         return;
       }
 
-      ESP_LOGD(TAG, "Data buffer size: %u bytes", data.size());
       const int32_t *samples = reinterpret_cast<const int32_t *>(data.data());
       size_t num_frames = data.size() / 8;  // Each frame has 2 int32_t (left and right)
       std::vector<int16_t> mono_data;
       mono_data.reserve(num_frames);
-
-      // Log samples
-      size_t log_limit = std::min<size_t>(5, num_frames);  // Reduced for brevity
-      for (size_t i = 0; i < log_limit; i++) {
-        int32_t left = samples[2 * i];
-        int32_t right = samples[2 * i + 1];
-        ESP_LOGD(TAG, "Frame %u - Left: %d (0x%08X), Right: %d (0x%08X)", i,
-                left, static_cast<uint32_t>(left), right, static_cast<uint32_t>(right));
-      }
 
       // Process and convert to 16-bit mono
       int32_t last_left = samples[0];
@@ -81,7 +71,6 @@ class UDPAudioComponent : public Component {
 
  protected:
   void send_data_(const std::vector<int16_t> &data) {
-    ESP_LOGD(TAG, "Sending %u mono samples (%u bytes)", data.size(), data.size() * sizeof(int16_t));
     this->socket_->sendto(data.data(), data.size() * sizeof(int16_t), 0,
                           reinterpret_cast<const sockaddr *>(&this->dest_addr_), sizeof(this->dest_addr_));
   }

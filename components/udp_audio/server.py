@@ -19,7 +19,7 @@ stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, output=True)
 while True:
     try:
         data, addr = sock.recvfrom(1024)
-        print("received message: %s" % data)
+        #print("received message: %s" % data)
         stream.write(data)
     except KeyboardInterrupt:
         break
